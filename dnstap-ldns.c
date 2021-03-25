@@ -27,6 +27,7 @@
 
 #include <fstrm.h>
 #include <ldns/ldns.h>
+#include <libpsl.h>
 
 #include "dnstap.pb/dnstap.pb-c.h"
 
@@ -89,6 +90,65 @@ print_json_string(const void *data, size_t len, FILE *out)
 		}
 	}
 	fputc('"', out);
+}
+
+static void
+to_lower(char *str)
+{
+	char *p;
+
+	for (p = str; *p; p++) {
+		*p = tolower(*p);
+	}
+}
+
+
+static char *
+get_etld_plus_1(char *const domain)
+{
+	const psl_ctx_t *psl = psl_builtin();
+	char *etldp1 = NULL;
+	char *etld = NULL;
+	char *_domain;
+	int domain_len;
+	char *ret = NULL;
+
+	if (domain == NULL || *domain == '\0')
+		return NULL;
+
+	_domain = strdup(domain);
+
+	// fprintf(stderr, "####: %s", _domain);
+
+	domain_len = strlen(_domain);
+	if (_domain[domain_len - 1] == '.') {
+		_domain[domain_len - 1] = '\0';
+	}
+
+	to_lower(_domain);
+
+	if (psl_is_public_suffix(psl, _domain))	{
+		free(_domain);
+		return NULL;
+	}
+
+	etldp1 = _domain;
+	while (etldp1) {
+		if ((etld = strchr(etldp1, '.')) == NULL)
+			break;
+
+		etld++;
+		if (psl_is_public_suffix(psl, etld)) {
+			ret = strdup(etldp1);
+			free(_domain);
+			return ret;
+		}
+
+		etldp1 = etld;
+	}
+
+	free(_domain);
+	return NULL;
 }
 
 static bool
@@ -205,6 +265,8 @@ print_dns_message_json(const ProtobufCBinaryData *message, FILE *fp)
 	ldns_rr_class qclass = 0;
 	ldns_rr_type qtype = 0;
 	ldns_status status;
+	char *etldp1;
+	char *etld;
 
 	/* Parse the raw wire message. */
 	status = ldns_wire2pkt(&pkt, message->data, message->len);
@@ -227,6 +289,17 @@ print_dns_message_json(const ProtobufCBinaryData *message, FILE *fp)
 		if (str) {
 			fputs(",\"qname\":", fp);
 			print_json_string(str, strlen(str), fp);
+
+			etldp1 = get_etld_plus_1(str);
+			if (etldp1) {
+				fputs(",\"qname_etld+1\":", fp);
+				print_json_string(etldp1, strlen(etldp1), fp);
+
+				etld = strchr(etldp1, '.') + 1;
+				fputs(",\"qname_etld\":", fp);
+				print_json_string(etld, strlen(etld), fp);
+				free(etldp1);
+			}
 			free(str);
 		}
 

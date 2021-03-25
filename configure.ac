@@ -32,6 +32,8 @@ PKG_CHECK_MODULES([libfstrm], [libfstrm >= 0.2.0])
 
 PKG_CHECK_MODULES([libprotobuf_c], [libprotobuf-c >= 1.0.1])
 
+PKG_CHECK_MODULES([libpsl], [libpsl])
+
 AC_PATH_PROG([PROTOC_C], [protoc-c])
 AS_IF([test -z "$PROTOC_C"],
   AC_MSG_ERROR([The protoc-c program was not found. Please install the protobuf-c compiler!]))
